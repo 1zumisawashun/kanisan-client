@@ -27,38 +27,37 @@ const updateGoogleSpreadsheet = (e: any) => {
 const greeting = (e: any) => {
   const params = JSON.parse(e.postData.getDataAsString());
   const response = ContentService.createTextOutput(params.challenge);
-  console.log(process.env.SLACK_INCOMING_WEBHOOK);
 
   if ("challenge" in params) return response;
 
-  // const userName = params.event.user;
-  // const text = params.event.text;
+  const userName = params.event.user;
+  const text = params.event.text;
 
-  // // Botによるメンションは無視
-  // if ("subtype" in params.event) return response;
+  // Botによるメンションは無視
+  if ("subtype" in params.event) return response;
 
-  // updateGoogleSpreadsheet(e);
+  updateGoogleSpreadsheet(e);
 
-  // const url = process.env.SLACK_INCOMING_WEBHOOK;
+  const url = process.env.SLACK_INCOMING_WEBHOOK;
 
-  // if (!url) return;
+  if (!url) return;
 
-  // const jsonData = {
-  //   username: userName,
-  //   icon_emoji: ":dog:",
-  //   text: `${text}(${userName})`,
-  // };
-  // const payload = JSON.stringify(jsonData);
+  const jsonData = {
+    username: userName,
+    icon_emoji: ":dog:",
+    text: `${text}(${userName})`,
+  };
+  const payload = JSON.stringify(jsonData);
 
-  // const options = {
-  //   method: "post",
-  //   contentType: "application/json",
-  //   payload: payload,
-  // };
+  const options = {
+    method: "post",
+    contentType: "application/json",
+    payload: payload,
+  };
 
-  // UrlFetchApp.fetch(url, options as any);
+  UrlFetchApp.fetch(url, options as any);
 
-  // return response;
+  return response;
 };
 
 (global as any).doPost = greeting;
