@@ -1,50 +1,89 @@
 // NOTE:スプシを同じ場所にコピーできるっぽい
 // file.makeCopy( 'fileName’)
+// const text = params.event.text;
 
-const getUserInfo = (params: any) => {
+const notifyToSlack = (params: any, message: string) => {
+  const url = process.env.SLACK_INCOMING_WEBHOOK;
+  const user = params.event.user;
+
+  if (!url) return;
+
+  const jsonData = { text: `<@${user}> ${message}` };
+  const payload = JSON.stringify(jsonData);
+
+  UrlFetchApp.fetch(url, {
+    method: "post",
+    contentType: "application/json",
+    payload: payload,
+  });
+};
+
+const getUserName = (params: any) => {
   const jsonData = {
     token: process.env.BOT_USER_OAUTH_TOKEN,
     user: params.event.user,
   };
-  const options = {
+
+  const res = UrlFetchApp.fetch("https://slack.com/api/users.info", {
     method: "get",
     contentType: "application/x-www-form-urlencoded",
     payload: jsonData,
-  };
-
-  const res = UrlFetchApp.fetch(
-    "https://slack.com/api/users.info",
-    options as any
-  );
+  });
 
   const userInfo = JSON.parse(res.getContentText());
-  return userInfo;
+
+  if (!userInfo) {
+    notifyToSlack(params, "getUserNameに失敗したかに!");
+    return;
+  }
+
+  return userInfo.user.real_name;
 };
 
-const createGoogleSpreadsheet = (name: string) => {
+const createGoogleSpreadsheet = (params: any, name: string) => {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const copySheet = spreadsheet.getSheetByName("コピー");
+
+  if (!copySheet) {
+    notifyToSlack(params, "createGoogleSpreadsheetに失敗したかに!");
+    return;
+  }
+
+  const newSheet = copySheet.copyTo(spreadsheet);
+  newSheet.setName(name);
+  return newSheet;
+};
+
+const getGoogleSpreadsheet = (params: any, name: string) => {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
 
   if (!sheet) {
-    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-    const copySheet = spreadsheet.getSheetByName("コピー");
-
-    if (!copySheet) return;
-
-    const newSheet = copySheet.copyTo(spreadsheet);
-    newSheet.setName(name);
+    const newSheet = createGoogleSpreadsheet(params, name);
     return newSheet;
   }
 
   return sheet;
 };
 
-const updateGoogleSpreadsheet = (params: any, sheet: any) => {
-  const now = new Date(params.event.event_ts * 1000);
-  const date = Utilities.formatDate(now, "Asia/Tokyo", "yyyy/MM/dd");
-  const time =
-    ("0" + now.getHours()).slice(-2) + ":" + ("0" + now.getMinutes()).slice(-2);
+const updateGoogleSpreadsheet = (
+  params: any,
+  sheet: GoogleAppsScript.Spreadsheet.Sheet | undefined
+) => {
+  if (!sheet) {
+    notifyToSlack(params, "sheetが見つからなかったかに!");
+    return;
+  }
 
   const text = params.event.text;
+  const eventTs = params.event.event_ts;
+
+  const now = new Date(eventTs * 1000);
+  const hours = ("0" + now.getHours()).slice(-2);
+  const minutes = ("0" + now.getMinutes()).slice(-2);
+
+  const date = Utilities.formatDate(now, "Asia/Tokyo", "yyyy/MM/dd");
+  const time = hours + ":" + minutes;
+
   const array = [date, time];
 
   // 最終行列を取得
@@ -53,6 +92,7 @@ const updateGoogleSpreadsheet = (params: any, sheet: any) => {
 
   //最終行列を指定
   const values = sheet.getRange(lastrow, 1, 1, lastcol).getValues().flat();
+
   const syukkin = values[1];
   const taikin = values[2];
 
@@ -61,6 +101,7 @@ const updateGoogleSpreadsheet = (params: any, sheet: any) => {
     //   return;
     // }
     sheet.appendRow(array);
+    notifyToSlack(params, "おはようかに!");
   }
   if (["おつ", "otu"].includes(text)) {
     // if (taikin) {
@@ -68,57 +109,27 @@ const updateGoogleSpreadsheet = (params: any, sheet: any) => {
     // }
     sheet.getRange(lastrow, 3).setValue(time);
     sheet.getRange(lastrow, 4).setValue(`=C${lastrow}-B${lastrow}`);
-    // ついでに関数も入れる
+
+    notifyToSlack(params, "おつかれかに!");
   }
 };
 
-const notifyToSlack = (params: any) => {
-  const url = process.env.SLACK_INCOMING_WEBHOOK;
-
-  const user = params.event.user;
-  const text = params.event.text;
-
-  if (!url) return;
-
-  const jsonData = {
-    username: user,
-    icon_emoji: ":dog:",
-    text: `<@${user}> ${text}`,
-  };
-  const payload = JSON.stringify(jsonData);
-
-  const options = {
-    method: "post",
-    contentType: "application/json",
-    payload: payload,
-  };
-
-  UrlFetchApp.fetch(url, options as any);
-};
-
-const greeting = (e: any) => {
+const main = (e: any) => {
   const params = JSON.parse(e.postData.getDataAsString());
-  const response = ContentService.createTextOutput(params.challenge);
 
   // SlackのEvent SubscriptionのRequest Verification用
-  if (params.type === "url_verification") return response;
+  if (params.type === "url_verification") {
+    return ContentService.createTextOutput(params.challenge);
+  }
 
   // Botによるメンションは無視
   if ("subtype" in params.event) return;
 
-  const userInfo = getUserInfo(params);
+  const name = getUserName(params);
 
-  if (!userInfo) return;
-
-  const name = userInfo.user.real_name;
-
-  const sheet = createGoogleSpreadsheet(name);
+  const sheet = getGoogleSpreadsheet(params, name);
 
   updateGoogleSpreadsheet(params, sheet);
-
-  notifyToSlack(params);
-
-  return;
 };
 
-(global as any).doPost = greeting;
+(global as any).doPost = main;
