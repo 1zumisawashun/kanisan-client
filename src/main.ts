@@ -84,6 +84,8 @@ const updateGoogleSpreadsheet = (
   const date = Utilities.formatDate(now, "Asia/Tokyo", "yyyy/MM/dd");
   const time = hours + ":" + minutes;
 
+  const datetime = date + time;
+
   const array = [date, time];
 
   // 最終行列を取得
@@ -97,20 +99,22 @@ const updateGoogleSpreadsheet = (
   const taikin = values[2];
 
   if (["おは", "oha"].includes(text)) {
-    // if (!taikin) {
-    //   return;
-    // }
+    if (!taikin) {
+      notifyToSlack(params, `まだ退勤していないかに!(${datetime})`);
+      return;
+    }
     sheet.appendRow(array);
-    notifyToSlack(params, "おはようかに!");
+    notifyToSlack(params, `おはようかに!(${datetime})`);
   }
   if (["おつ", "otu"].includes(text)) {
-    // if (taikin) {
-    //   return;
-    // }
+    if (taikin) {
+      notifyToSlack(params, `既に退勤しているかに!(${datetime})`);
+      return;
+    }
     sheet.getRange(lastrow, 3).setValue(time);
     sheet.getRange(lastrow, 4).setValue(`=C${lastrow}-B${lastrow}`);
 
-    notifyToSlack(params, "おつかれかに!");
+    notifyToSlack(params, `おつかれかに!(${datetime})`);
   }
 };
 
