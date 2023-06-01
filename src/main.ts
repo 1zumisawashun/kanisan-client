@@ -36,8 +36,11 @@ const getUserName = (params: any) => {
   return userInfo.user.real_name;
 };
 
-const createGoogleSpreadsheet = (params: any, date: string) => {
-  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+const createGoogleSpreadsheet = (
+  params: any,
+  date: string,
+  spreadsheet: GoogleAppsScript.Spreadsheet.Spreadsheet
+) => {
   const copySheet = spreadsheet.getSheetByName("コピー");
 
   if (!copySheet) {
@@ -50,15 +53,19 @@ const createGoogleSpreadsheet = (params: any, date: string) => {
   return newSheet;
 };
 
-const getGoogleSpreadsheet = (params: any) => {
+const getGoogleSpreadsheet = (
+  params: any,
+  spreadsheet: GoogleAppsScript.Spreadsheet.Spreadsheet
+) => {
   const eventTs = params.event.event_ts;
   const now = new Date(eventTs * 1000);
-  const date = Utilities.formatDate(now, "Asia/Tokyo", "yyyy/MM");
+  // NOTE:テストも兼ねて日時でシートが増える実装にしている
+  const date = Utilities.formatDate(now, "Asia/Tokyo", "yyyy/MM/dd");
 
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(date);
+  const sheet = spreadsheet.getSheetByName(date);
 
   if (!sheet) {
-    const newSheet = createGoogleSpreadsheet(params, date);
+    const newSheet = createGoogleSpreadsheet(params, date, spreadsheet);
     return newSheet;
   }
 
@@ -118,20 +125,9 @@ const updateGoogleSpreadsheet = (
 };
 
 const getFolder = () => {
-  const folderId = process.env.KANISAN_CLIENT_FOLDER_ID!;
+  const folderId = process.env.KANISAN_CLIENT_FOLDER_ID || "";
   const folder = DriveApp.getFolderById(folderId);
   return folder;
-};
-
-const createFile = (name: string) => {
-  const folder = getFolder();
-  const files = folder.getFilesByName("コピー");
-  if (files.hasNext()) {
-    const file = files.next();
-    const copiedFile = file.makeCopy(name, folder);
-
-    return SpreadsheetApp.openById(copiedFile.getId());
-  }
 };
 
 // NOTE:idからroot_folderを探し該当のファイルを開くまでの処理
@@ -139,13 +135,26 @@ const findSpreadsheetByName = (name: string) => {
   const folder = getFolder();
   const files = folder.getFilesByName(name);
 
-  // find spreadsheet
-  if (files.hasNext()) {
+  while (files.hasNext()) {
     const file = files.next(); // get file
     return SpreadsheetApp.openById(file.getId()); // open spreadsheet
-  } else {
-    return createFile(name);
   }
+
+  return;
+};
+
+// makeCopyの処理でなどループするので新規ユーザーはincoming-webhookを使ってファイルを生成する
+const createSpreadsheetByName = (name: string) => {
+  const folder = getFolder();
+  const files = folder.getFilesByName("コピー");
+
+  while (files.hasNext()) {
+    const file = files.next();
+    const copiedFile = file.makeCopy(name, folder);
+    return SpreadsheetApp.openById(copiedFile.getId());
+  }
+
+  return;
 };
 
 const main = (e: any) => {
@@ -161,10 +170,15 @@ const main = (e: any) => {
 
   const name = getUserName(params);
 
-  const file = findSpreadsheetByName(name);
-  // file!.getSheetByName(name)
+  const spreadsheet = findSpreadsheetByName(name);
 
-  const sheet = getGoogleSpreadsheet(params);
+  if (!spreadsheet) {
+    notifyToSlack(params, "spreadsheetが見つからなかったかに!");
+    return;
+    // NOTE:ここでボタンを押させてコピーボタンを押させるでいいかも
+  }
+
+  const sheet = getGoogleSpreadsheet(params, spreadsheet);
 
   updateGoogleSpreadsheet(params, sheet);
 };
