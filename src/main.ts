@@ -1,7 +1,3 @@
-// NOTE:スプシを同じ場所にコピーできるっぽい
-// file.makeCopy( 'fileName’)
-// const text = params.event.text;
-
 const notifyToSlack = (params: any, message: string) => {
   const url = process.env.SLACK_INCOMING_WEBHOOK;
   const user = params.event.user;
@@ -40,7 +36,7 @@ const getUserName = (params: any) => {
   return userInfo.user.real_name;
 };
 
-const createGoogleSpreadsheet = (params: any, name: string) => {
+const createGoogleSpreadsheet = (params: any, date: string) => {
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   const copySheet = spreadsheet.getSheetByName("コピー");
 
@@ -50,15 +46,19 @@ const createGoogleSpreadsheet = (params: any, name: string) => {
   }
 
   const newSheet = copySheet.copyTo(spreadsheet);
-  newSheet.setName(name);
+  newSheet.setName(date);
   return newSheet;
 };
 
-const getGoogleSpreadsheet = (params: any, name: string) => {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
+const getGoogleSpreadsheet = (params: any) => {
+  const eventTs = params.event.event_ts;
+  const now = new Date(eventTs * 1000);
+  const date = Utilities.formatDate(now, "Asia/Tokyo", "yyyy/MM");
+
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(date);
 
   if (!sheet) {
-    const newSheet = createGoogleSpreadsheet(params, name);
+    const newSheet = createGoogleSpreadsheet(params, date);
     return newSheet;
   }
 
@@ -84,18 +84,17 @@ const updateGoogleSpreadsheet = (
   const date = Utilities.formatDate(now, "Asia/Tokyo", "yyyy/MM/dd");
   const time = hours + ":" + minutes;
 
-  const datetime = date + time;
+  const datetime = `${date} ${time}`;
 
   const array = [date, time];
 
-  // 最終行列を取得
+  // NOTE:最終行列を取得する
   const lastrow = sheet.getLastRow();
   const lastcol = sheet.getLastColumn();
 
-  //最終行列を指定
+  // NOTE:最終行列を指定する
   const values = sheet.getRange(lastrow, 1, 1, lastcol).getValues().flat();
 
-  const syukkin = values[1];
   const taikin = values[2];
 
   if (["おは", "oha"].includes(text)) {
@@ -118,20 +117,54 @@ const updateGoogleSpreadsheet = (
   }
 };
 
+const getFolder = () => {
+  const folderId = process.env.KANISAN_CLIENT_FOLDER_ID!;
+  const folder = DriveApp.getFolderById(folderId);
+  return folder;
+};
+
+const createFile = (name: string) => {
+  const folder = getFolder();
+  const files = folder.getFilesByName("コピー");
+  if (files.hasNext()) {
+    const file = files.next();
+    const copiedFile = file.makeCopy(name, folder);
+
+    return SpreadsheetApp.openById(copiedFile.getId());
+  }
+};
+
+// NOTE:idからroot_folderを探し該当のファイルを開くまでの処理
+const findSpreadsheetByName = (name: string) => {
+  const folder = getFolder();
+  const files = folder.getFilesByName(name);
+
+  // find spreadsheet
+  if (files.hasNext()) {
+    const file = files.next(); // get file
+    return SpreadsheetApp.openById(file.getId()); // open spreadsheet
+  } else {
+    return createFile(name);
+  }
+};
+
 const main = (e: any) => {
   const params = JSON.parse(e.postData.getDataAsString());
 
-  // SlackのEvent SubscriptionのRequest Verification用
+  // NOTE:SlackのEvent SubscriptionのRequest Verification用
   if (params.type === "url_verification") {
     return ContentService.createTextOutput(params.challenge);
   }
 
-  // Botによるメンションは無視
+  // NOTE:Botによるメンションは無視する
   if ("subtype" in params.event) return;
 
   const name = getUserName(params);
 
-  const sheet = getGoogleSpreadsheet(params, name);
+  const file = findSpreadsheetByName(name);
+  // file!.getSheetByName(name)
+
+  const sheet = getGoogleSpreadsheet(params);
 
   updateGoogleSpreadsheet(params, sheet);
 };
