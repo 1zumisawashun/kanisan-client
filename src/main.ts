@@ -36,7 +36,7 @@ const getUserName = (params: any) => {
   return userInfo.user.real_name;
 };
 
-const createGoogleSpreadsheet = (
+const createSheet = (
   params: any,
   date: string,
   spreadsheet: GoogleAppsScript.Spreadsheet.Spreadsheet
@@ -44,7 +44,7 @@ const createGoogleSpreadsheet = (
   const copySheet = spreadsheet.getSheetByName("コピー");
 
   if (!copySheet) {
-    sendToSlack(params, "createGoogleSpreadsheetに失敗したかに!");
+    sendToSlack(params, "createSheetに失敗したかに!");
     return;
   }
 
@@ -53,26 +53,30 @@ const createGoogleSpreadsheet = (
   return newSheet;
 };
 
-const getGoogleSpreadsheet = (
+const getSheet = (
   params: any,
-  spreadsheet: GoogleAppsScript.Spreadsheet.Spreadsheet
+  spreadsheet: GoogleAppsScript.Spreadsheet.Spreadsheet | undefined
 ) => {
+  if (!spreadsheet) {
+    sendToSlack(params, "spreadsheetが見つからなかったかに!");
+    return;
+  }
+
   const eventTs = params.event.event_ts;
   const now = new Date(eventTs * 1000);
-  // NOTE:テストも兼ねて日時でシートが増える実装にしている
-  const date = Utilities.formatDate(now, "Asia/Tokyo", "yyyy/MM/dd");
+  const date = Utilities.formatDate(now, "Asia/Tokyo", "yyyy/MM");
 
   const sheet = spreadsheet.getSheetByName(date);
 
   if (!sheet) {
-    const newSheet = createGoogleSpreadsheet(params, date, spreadsheet);
+    const newSheet = createSheet(params, date, spreadsheet);
     return newSheet;
   }
 
   return sheet;
 };
 
-const updateGoogleSpreadsheet = (
+const updateSheet = (
   params: any,
   sheet: GoogleAppsScript.Spreadsheet.Sheet | undefined
 ) => {
@@ -124,49 +128,53 @@ const updateGoogleSpreadsheet = (
   }
 };
 
-const getFolder = () => {
-  const folderId = process.env.KANISAN_CLIENT_FOLDER_ID || "";
+const createSpreadsheet = (username: string) => {
+  const folderId = process.env.KANISAN_CLIENT_FOLDER_ID;
+  if (!folderId) return;
+
   const folder = DriveApp.getFolderById(folderId);
-  return folder;
-};
-
-// NOTE:idからroot_folderを探し該当のファイルを開くまでの処理
-const findSpreadsheetByName = (name: string) => {
-  const folder = getFolder();
-  const files = folder.getFilesByName(name);
-
-  while (files.hasNext()) {
-    const file = files.next(); // get file
-    return SpreadsheetApp.openById(file.getId()); // open spreadsheet
-  }
-
-  return;
-};
-
-// makeCopyの処理でなどループするので新規ユーザーはincoming-webhookを使ってファイルを生成する
-const createSpreadsheetByName = (name: string) => {
-  const folder = getFolder();
   const files = folder.getFilesByName("コピー");
 
   while (files.hasNext()) {
     const file = files.next();
-    const copiedFile = file.makeCopy(name, folder);
+    const copiedFile = file.makeCopy(username, folder);
     return SpreadsheetApp.openById(copiedFile.getId());
   }
 
   return;
 };
 
+const getSpreadsheet = (params: any, username: string) => {
+  const folderId = process.env.KANISAN_CLIENT_FOLDER_ID;
+  if (!folderId) return;
+
+  const folder = DriveApp.getFolderById(folderId);
+  const files = folder.getFilesByName(username);
+
+  while (files.hasNext()) {
+    const file = files.next(); // get file
+    return SpreadsheetApp.openById(file.getId()); // open spreadsheet
+  }
+
+  // NOTE:もしスプシを取得できなければ新規作成する
+  const message = "新しい仲間かに?新しくspreadsheetを作成するかに!";
+  sendToSlack(params, message);
+  return createSpreadsheet(username);
+};
+
 const main = (e: any) => {
   const params = JSON.parse(e.postData.getDataAsString());
+  const contents = JSON.parse(e.postData.contents);
 
   // NOTE:SlackのEvent SubscriptionのRequest Verification用
   if (params.type === "url_verification") {
     return ContentService.createTextOutput(params.challenge);
   }
 
-  const contents = JSON.parse(e.postData.contents);
+  // NOTE:Slack Botによるメンションを無視する
+  if ("subtype" in params.event) return;
 
+  // NOTE:Slackの3秒ルールで発生するリトライをキャッシュする
   const cache = CacheService.getScriptCache();
   if (cache.get(contents.event.client_msg_id) == "done") {
     return ContentService.createTextOutput();
@@ -174,23 +182,11 @@ const main = (e: any) => {
     cache.put(contents.event.client_msg_id, "done", 600);
   }
 
-  // NOTE:Botによるメンションは無視する
-  if ("subtype" in params.event) return;
-
-  const name = getUserName(params);
-
-  let spreadsheet;
-
-  spreadsheet = findSpreadsheetByName(name);
-
-  if (!spreadsheet) {
-    sendToSlack(params, "spreadsheetが見つからなかったかに!");
-    spreadsheet = createSpreadsheetByName(name);
-  }
-
-  const sheet = getGoogleSpreadsheet(params, spreadsheet!);
-
-  updateGoogleSpreadsheet(params, sheet);
+  // NOTE:以下からメインの処理
+  const username = getUserName(params);
+  const spreadsheet = getSpreadsheet(params, username);
+  const sheet = getSheet(params, spreadsheet);
+  updateSheet(params, sheet);
 
   return ContentService.createTextOutput();
 };
