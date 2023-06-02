@@ -1,40 +1,15 @@
-const sendToSlack = (params: any, message: string) => {
-  const url = process.env.SLACK_INCOMING_WEBHOOK;
-  const user = params.event.user;
-
-  if (!url) return;
-
-  const jsonData = { text: `<@${user}> ${message}` };
-  const payload = JSON.stringify(jsonData);
-
-  UrlFetchApp.fetch(url, {
-    method: "post",
-    contentType: "application/json",
-    payload: payload,
-  });
-};
-
-const getUserName = (params: any) => {
-  const jsonData = {
-    token: process.env.BOT_USER_OAUTH_TOKEN,
-    user: params.event.user,
-  };
-
-  const res = UrlFetchApp.fetch("https://slack.com/api/users.info", {
-    method: "get",
-    contentType: "application/x-www-form-urlencoded",
-    payload: jsonData,
-  });
-
-  const userInfo = JSON.parse(res.getContentText());
-
-  if (!userInfo) {
-    sendToSlack(params, "getUserNameに失敗したかに!");
-    return;
-  }
-
-  return userInfo.user.real_name;
-};
+import {
+  syukkin_messages,
+  taikin_messages,
+  syukkin_keywords,
+  taikin_keywords,
+} from "./constants";
+import {
+  sendToSlack,
+  getRandomValue,
+  hasPartialMatch,
+  getUserName,
+} from "./helpers";
 
 const createSheet = (
   params: any,
@@ -44,7 +19,7 @@ const createSheet = (
   const copySheet = spreadsheet.getSheetByName("コピー");
 
   if (!copySheet) {
-    sendToSlack(params, "createSheetに失敗したかに!");
+    sendToSlack(params, "createSheetに失敗したかに！");
     return;
   }
 
@@ -58,7 +33,7 @@ const getSheet = (
   spreadsheet: GoogleAppsScript.Spreadsheet.Spreadsheet | undefined
 ) => {
   if (!spreadsheet) {
-    sendToSlack(params, "spreadsheetが見つからなかったかに!");
+    sendToSlack(params, "spreadsheetが見つからなかったかに！");
     return;
   }
 
@@ -81,7 +56,7 @@ const updateSheet = (
   sheet: GoogleAppsScript.Spreadsheet.Sheet | undefined
 ) => {
   if (!sheet) {
-    sendToSlack(params, "sheetが見つからなかったかに!");
+    sendToSlack(params, "sheetが見つからなかったかに！");
     return;
   }
 
@@ -108,23 +83,25 @@ const updateSheet = (
 
   const taikin = values[2];
 
-  if (["おは", "oha"].includes(text)) {
+  if (hasPartialMatch(text, syukkin_keywords)) {
     if (!taikin) {
-      sendToSlack(params, `まだ退勤していないかに!(${datetime})`);
+      sendToSlack(params, `まだ退勤していないかに！ (${datetime})`);
       return;
     }
     sheet.appendRow(array);
-    sendToSlack(params, `おはようかに!(${datetime})`);
+    const message = getRandomValue(syukkin_messages);
+    sendToSlack(params, `${message} (${datetime})`);
   }
-  if (["おつ", "otu"].includes(text)) {
+  if (hasPartialMatch(text, taikin_keywords)) {
     if (taikin) {
-      sendToSlack(params, `既に退勤しているかに!(${datetime})`);
+      sendToSlack(params, `もう退勤しているかに！ (${datetime})`);
       return;
     }
     sheet.getRange(lastrow, 3).setValue(time);
     sheet.getRange(lastrow, 4).setValue(`=C${lastrow}-B${lastrow}`);
 
-    sendToSlack(params, `おつかれかに!(${datetime})`);
+    const message = getRandomValue(taikin_messages);
+    sendToSlack(params, `${message} (${datetime})`);
   }
 };
 
@@ -157,7 +134,7 @@ const getSpreadsheet = (params: any, username: string) => {
   }
 
   // NOTE:もしスプシを取得できなければ新規作成する
-  const message = "新しい仲間かに?新しくspreadsheetを作成するかに!";
+  const message = "新しい仲間かに？ 新しくspreadsheetを作成するかに！";
   sendToSlack(params, message);
   return createSpreadsheet(username);
 };

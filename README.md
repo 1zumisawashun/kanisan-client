@@ -1,41 +1,53 @@
-# Google App Script starter template
+# kanisan-client
 
-Starter template for Google App Script development in local.
+kanisan-client
 
-## 🎨 Features
+## Overview
 
-- Deploy local project with [clasp](https://github.com/google/clasp)
-- Use TypeScript
-- Bundle file with Webpack5 （You can use npm modules）
-- Lint code with [ESLint](https://github.com/eslint/eslint) 
-- Format code with [prettier](https://github.com/prettier/prettier)
-- Pre commit lint and format with [husky](https://github.com/typicode/husky) and [lint-stage](https://github.com/okonet/lint-staged)
+- 業務委託用の勤怠管理チャンネルです。
+- slackから出退勤の時間をスプレッドシートに反映することができます。
+- google drive上で業務委託メンバーの勤怠を管理することができます。
 
-## 🚀 Try it now!
-GitHub Template
-[Create a repo from this template on GitHub](https://github.com/kawamataryo/google-app-script-starter-template/generate)
+## Installation
 
-Fix the `project_id` in `.clasp.json` to your GAS project.
+- clone
 
-```.clasp.json
-{
-  "scriptId": "<YOUR_SCRIPT_ID>",
-  "rootDir": "./dist"
-}
+```bash
+$ git clone git@github.com:1zumisawashun/kanisan-client.git
+$ cd kanisan-client
 ```
 
-## ⚒ Usage
+- install
 
-### Build
-Build project with Webpack.
-
-```
-npm run build
+```bash
+$ yarn install
 ```
 
-### Deploy
-Deploy project with clasp.
+- 上記の手順で失敗する場合 [Troubleshoot](#Troubleshoot)を確認してください
 
+## How to
+
+- deployする
+
+```bash
+$ yarn deploy
 ```
-npm run deploy
+
+- linterを当てる
+
+```bash
+$ yarn lint:fix
 ```
+
+## Troubleshoot
+
+- なし
+
+## その他ドキュメント
+
+- 出勤する
+    - 「おは」とメッセージを送ってください。
+    - かにさんから返信が来れば出勤完了です。
+- 退勤する
+    - 「おつ」とメッセージを送ってください。
+    - かにさんから返信が来れば退勤完了です。
