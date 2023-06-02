@@ -1,4 +1,4 @@
-const notifyToSlack = (params: any, message: string) => {
+const sendToSlack = (params: any, message: string) => {
   const url = process.env.SLACK_INCOMING_WEBHOOK;
   const user = params.event.user;
 
@@ -29,7 +29,7 @@ const getUserName = (params: any) => {
   const userInfo = JSON.parse(res.getContentText());
 
   if (!userInfo) {
-    notifyToSlack(params, "getUserNameに失敗したかに!");
+    sendToSlack(params, "getUserNameに失敗したかに!");
     return;
   }
 
@@ -44,7 +44,7 @@ const createGoogleSpreadsheet = (
   const copySheet = spreadsheet.getSheetByName("コピー");
 
   if (!copySheet) {
-    notifyToSlack(params, "createGoogleSpreadsheetに失敗したかに!");
+    sendToSlack(params, "createGoogleSpreadsheetに失敗したかに!");
     return;
   }
 
@@ -77,7 +77,7 @@ const updateGoogleSpreadsheet = (
   sheet: GoogleAppsScript.Spreadsheet.Sheet | undefined
 ) => {
   if (!sheet) {
-    notifyToSlack(params, "sheetが見つからなかったかに!");
+    sendToSlack(params, "sheetが見つからなかったかに!");
     return;
   }
 
@@ -106,21 +106,21 @@ const updateGoogleSpreadsheet = (
 
   if (["おは", "oha"].includes(text)) {
     if (!taikin) {
-      notifyToSlack(params, `まだ退勤していないかに!(${datetime})`);
+      sendToSlack(params, `まだ退勤していないかに!(${datetime})`);
       return;
     }
     sheet.appendRow(array);
-    notifyToSlack(params, `おはようかに!(${datetime})`);
+    sendToSlack(params, `おはようかに!(${datetime})`);
   }
   if (["おつ", "otu"].includes(text)) {
     if (taikin) {
-      notifyToSlack(params, `既に退勤しているかに!(${datetime})`);
+      sendToSlack(params, `既に退勤しているかに!(${datetime})`);
       return;
     }
     sheet.getRange(lastrow, 3).setValue(time);
     sheet.getRange(lastrow, 4).setValue(`=C${lastrow}-B${lastrow}`);
 
-    notifyToSlack(params, `おつかれかに!(${datetime})`);
+    sendToSlack(params, `おつかれかに!(${datetime})`);
   }
 };
 
@@ -165,22 +165,34 @@ const main = (e: any) => {
     return ContentService.createTextOutput(params.challenge);
   }
 
+  const contents = JSON.parse(e.postData.contents);
+
+  const cache = CacheService.getScriptCache();
+  if (cache.get(contents.event.client_msg_id) == "done") {
+    return ContentService.createTextOutput();
+  } else {
+    cache.put(contents.event.client_msg_id, "done", 600);
+  }
+
   // NOTE:Botによるメンションは無視する
   if ("subtype" in params.event) return;
 
   const name = getUserName(params);
 
-  const spreadsheet = findSpreadsheetByName(name);
+  let spreadsheet;
+
+  spreadsheet = findSpreadsheetByName(name);
 
   if (!spreadsheet) {
-    notifyToSlack(params, "spreadsheetが見つからなかったかに!");
-    return;
-    // NOTE:ここでボタンを押させてコピーボタンを押させるでいいかも
+    sendToSlack(params, "spreadsheetが見つからなかったかに!");
+    spreadsheet = createSpreadsheetByName(name);
   }
 
-  const sheet = getGoogleSpreadsheet(params, spreadsheet);
+  const sheet = getGoogleSpreadsheet(params, spreadsheet!);
 
   updateGoogleSpreadsheet(params, sheet);
+
+  return ContentService.createTextOutput();
 };
 
 (global as any).doPost = main;
