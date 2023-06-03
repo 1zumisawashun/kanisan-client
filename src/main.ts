@@ -71,6 +71,8 @@ const updateSheet = (
   const syukkin = values[1];
   const taikin = values[2];
 
+  const formattedDate = Utilities.formatDate(date, "Asia/Tokyo", "yyyy/MM/dd");
+
   if (hasPartialMatch(text, syukkin_keywords)) {
     if (syukkin && !taikin) {
       const message = `まだ退勤していないかに！ (${dateFullYearMonthDayTime})`;
@@ -92,10 +94,18 @@ const updateSheet = (
     }
 
     // NOTE:日を跨いで退勤した場合（6/1 23:00に稼働して6/2 01:00に退勤した場合）
-    if (date !== dateFullYearMonthDay) {
-      sheet.getRange(lastrow, 3).setValue("00:00");
+    if (formattedDate !== dateFullYearMonthDay) {
+      sheet.getRange(lastrow, 3).setValue("23:59");
       sheet.getRange(lastrow, 4).setValue(`=C${lastrow}-B${lastrow}`);
       sheet.appendRow([dateFullYearMonthDay, "00:00"]);
+
+      const sum = `=C${lastrow + 1}-B${lastrow + 1}`;
+      sheet.getRange(lastrow + 1, 3).setValue(time);
+      sheet.getRange(lastrow + 1, 4).setValue(sum);
+
+      const message = getRandomValue(taikin_messages);
+      sendToSlack(params, `${message} (${dateFullYearMonthDayTime})`);
+      return;
     }
 
     sheet.getRange(lastrow, 3).setValue(time);
