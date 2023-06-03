@@ -146,7 +146,7 @@ const createSpreadsheet = (username: string) => {
   if (!folderId) return;
 
   const folder = DriveApp.getFolderById(folderId);
-  const files = folder.getFilesByName("コピー");
+  const files = folder.getFilesByName("コピー（削除厳禁）");
 
   while (files.hasNext()) {
     const file = files.next();
