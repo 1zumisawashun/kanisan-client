@@ -64,15 +64,17 @@ const updateSheetForSyukkin = (
   const syukkin = values[1];
   const taikin = values[2];
 
+  // NOTE:まだ退勤していない場合（6/1 9:00に出勤して6/1 12:00に出勤した場合）
   if (syukkin && !taikin) {
-    const message = `まだ退勤していないかに！ (${dateFullYearMonthDayTime})`;
+    const message = `まだ退勤していないかに！（${dateFullYearMonthDayTime}）`;
     sendToSlack(params, message);
     return;
   }
+
   sheet.appendRow([dateFullYearMonthDay, time]);
 
   const message = getRandomValue(syukkin_messages);
-  sendToSlack(params, `${message} (${dateFullYearMonthDayTime})`);
+  sendToSlack(params, `${message}（${dateFullYearMonthDayTime}）`);
 };
 
 const updateSheetForTaikin = (
@@ -93,8 +95,9 @@ const updateSheetForTaikin = (
 
   const formattedDate = Utilities.formatDate(date, "Asia/Tokyo", "yyyy/MM/dd");
 
+  // NOTE:すでに退勤している場合（6/1 9:00に退勤して6/1 12:00に退勤した場合）
   if (syukkin && taikin) {
-    const message = `もう退勤しているかに！ (${dateFullYearMonthDayTime})`;
+    const message = `もう退勤しているかに！（${dateFullYearMonthDayTime}）`;
     sendToSlack(params, message);
     return;
   }
@@ -110,7 +113,7 @@ const updateSheetForTaikin = (
     sheet.getRange(lastrow + 1, 4).setValue(sum);
 
     const message = getRandomValue(taikin_messages);
-    sendToSlack(params, `${message} (${dateFullYearMonthDayTime})`);
+    sendToSlack(params, `${message}（${dateFullYearMonthDayTime}）`);
     return;
   }
 
@@ -118,7 +121,7 @@ const updateSheetForTaikin = (
   sheet.getRange(lastrow, 4).setValue(`=C${lastrow}-B${lastrow}`);
 
   const message = getRandomValue(taikin_messages);
-  sendToSlack(params, `${message} (${dateFullYearMonthDayTime})`);
+  sendToSlack(params, `${message}（${dateFullYearMonthDayTime}）`);
 };
 
 const updateSheet = (
