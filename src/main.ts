@@ -49,18 +49,38 @@ const getSheet = (
   return sheet;
 };
 
-const updateSheet = (
+const updateSheetForSyukkin = (
   params: any,
-  sheet: GoogleAppsScript.Spreadsheet.Sheet | undefined
+  sheet: GoogleAppsScript.Spreadsheet.Sheet
 ) => {
-  if (!sheet) {
-    sendToSlack(params, "sheetが見つからなかったかに！");
-    return;
-  }
   const { dateFullYearMonthDay, time, dateFullYearMonthDayTime } =
     getFormattedDate(params);
 
-  const text = params.event.text;
+  const lastrow = sheet.getLastRow();
+  const lastcol = sheet.getLastColumn();
+
+  const values = sheet.getRange(lastrow, 1, 1, lastcol).getValues().flat();
+
+  const syukkin = values[1];
+  const taikin = values[2];
+
+  if (syukkin && !taikin) {
+    const message = `まだ退勤していないかに！ (${dateFullYearMonthDayTime})`;
+    sendToSlack(params, message);
+    return;
+  }
+  sheet.appendRow([dateFullYearMonthDay, time]);
+
+  const message = getRandomValue(syukkin_messages);
+  sendToSlack(params, `${message} (${dateFullYearMonthDayTime})`);
+};
+
+const updateSheetForTaikin = (
+  params: any,
+  sheet: GoogleAppsScript.Spreadsheet.Sheet
+) => {
+  const { dateFullYearMonthDay, time, dateFullYearMonthDayTime } =
+    getFormattedDate(params);
 
   const lastrow = sheet.getLastRow();
   const lastcol = sheet.getLastColumn();
@@ -73,46 +93,50 @@ const updateSheet = (
 
   const formattedDate = Utilities.formatDate(date, "Asia/Tokyo", "yyyy/MM/dd");
 
-  if (hasPartialMatch(text, syukkin_keywords)) {
-    if (syukkin && !taikin) {
-      const message = `まだ退勤していないかに！ (${dateFullYearMonthDayTime})`;
-      sendToSlack(params, message);
-      return;
-    }
-    sheet.appendRow([dateFullYearMonthDay, time]);
+  if (syukkin && taikin) {
+    const message = `もう退勤しているかに！ (${dateFullYearMonthDayTime})`;
+    sendToSlack(params, message);
+    return;
+  }
 
-    const message = getRandomValue(syukkin_messages);
+  // NOTE:日を跨いで退勤した場合（6/1 23:00に稼働して6/2 01:00に退勤した場合）
+  if (formattedDate !== dateFullYearMonthDay) {
+    sheet.getRange(lastrow, 3).setValue("23:59");
+    sheet.getRange(lastrow, 4).setValue(`=C${lastrow}-B${lastrow}`);
+    sheet.appendRow([dateFullYearMonthDay, "00:00"]);
+
+    const sum = `=C${lastrow + 1}-B${lastrow + 1}`;
+    sheet.getRange(lastrow + 1, 3).setValue(time);
+    sheet.getRange(lastrow + 1, 4).setValue(sum);
+
+    const message = getRandomValue(taikin_messages);
     sendToSlack(params, `${message} (${dateFullYearMonthDayTime})`);
     return;
   }
 
-  if (hasPartialMatch(text, taikin_keywords)) {
-    if (syukkin && taikin) {
-      const message = `もう退勤しているかに！ (${dateFullYearMonthDayTime})`;
-      sendToSlack(params, message);
-      return;
-    }
+  sheet.getRange(lastrow, 3).setValue(time);
+  sheet.getRange(lastrow, 4).setValue(`=C${lastrow}-B${lastrow}`);
 
-    // NOTE:日を跨いで退勤した場合（6/1 23:00に稼働して6/2 01:00に退勤した場合）
-    if (formattedDate !== dateFullYearMonthDay) {
-      sheet.getRange(lastrow, 3).setValue("23:59");
-      sheet.getRange(lastrow, 4).setValue(`=C${lastrow}-B${lastrow}`);
-      sheet.appendRow([dateFullYearMonthDay, "00:00"]);
+  const message = getRandomValue(taikin_messages);
+  sendToSlack(params, `${message} (${dateFullYearMonthDayTime})`);
+};
 
-      const sum = `=C${lastrow + 1}-B${lastrow + 1}`;
-      sheet.getRange(lastrow + 1, 3).setValue(time);
-      sheet.getRange(lastrow + 1, 4).setValue(sum);
+const updateSheet = (
+  params: any,
+  sheet: GoogleAppsScript.Spreadsheet.Sheet | undefined
+) => {
+  if (!sheet) {
+    sendToSlack(params, "sheetが見つからなかったかに！");
+    return;
+  }
 
-      const message = getRandomValue(taikin_messages);
-      sendToSlack(params, `${message} (${dateFullYearMonthDayTime})`);
-      return;
-    }
+  if (hasPartialMatch(params.event.text, syukkin_keywords)) {
+    updateSheetForSyukkin(params, sheet);
+    return;
+  }
 
-    sheet.getRange(lastrow, 3).setValue(time);
-    sheet.getRange(lastrow, 4).setValue(`=C${lastrow}-B${lastrow}`);
-
-    const message = getRandomValue(taikin_messages);
-    sendToSlack(params, `${message} (${dateFullYearMonthDayTime})`);
+  if (hasPartialMatch(params.event.text, taikin_keywords)) {
+    updateSheetForTaikin(params, sheet);
     return;
   }
 };
@@ -153,7 +177,6 @@ const getSpreadsheet = (params: any, username: string) => {
 
 const main = (e: any) => {
   const params = JSON.parse(e.postData.getDataAsString());
-  const contents = JSON.parse(e.postData.contents);
 
   // NOTE:SlackのEvent SubscriptionのRequest Verification用
   if (params.type === "url_verification") {
@@ -165,11 +188,10 @@ const main = (e: any) => {
 
   // NOTE:Slackの3秒ルールで発生するリトライをキャッシュする
   const cache = CacheService.getScriptCache();
-  if (cache.get(contents.event.client_msg_id) == "done") {
-    return ContentService.createTextOutput();
-  } else {
-    cache.put(contents.event.client_msg_id, "done", 600);
-  }
+
+  if (cache.get(params.event.client_msg_id) == "done") return;
+
+  cache.put(params.event.client_msg_id, "done", 600);
 
   // NOTE:以下からメインの処理
   const username = getUserName(params);
@@ -177,7 +199,7 @@ const main = (e: any) => {
   const sheet = getSheet(params, spreadsheet);
   updateSheet(params, sheet);
 
-  return ContentService.createTextOutput();
+  return;
 };
 
 (global as any).doPost = main;
