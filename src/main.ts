@@ -67,10 +67,12 @@ const updateSheet = (
 
   const values = sheet.getRange(lastrow, 1, 1, lastcol).getValues().flat();
 
+  const date = values[0];
+  const syukkin = values[1];
   const taikin = values[2];
 
   if (hasPartialMatch(text, syukkin_keywords)) {
-    if (!taikin) {
+    if (syukkin && !taikin) {
       const message = `まだ退勤していないかに！ (${dateFullYearMonthDayTime})`;
       sendToSlack(params, message);
       return;
@@ -81,12 +83,21 @@ const updateSheet = (
     sendToSlack(params, `${message} (${dateFullYearMonthDayTime})`);
     return;
   }
+
   if (hasPartialMatch(text, taikin_keywords)) {
-    if (taikin) {
+    if (syukkin && taikin) {
       const message = `もう退勤しているかに！ (${dateFullYearMonthDayTime})`;
       sendToSlack(params, message);
       return;
     }
+
+    // NOTE:日を跨いで退勤した場合（6/1 23:00に稼働して6/2 01:00に退勤した場合）
+    if (date !== dateFullYearMonthDay) {
+      sheet.getRange(lastrow, 3).setValue("00:00");
+      sheet.getRange(lastrow, 4).setValue(`=C${lastrow}-B${lastrow}`);
+      sheet.appendRow([dateFullYearMonthDay, "00:00"]);
+    }
+
     sheet.getRange(lastrow, 3).setValue(time);
     sheet.getRange(lastrow, 4).setValue(`=C${lastrow}-B${lastrow}`);
 
