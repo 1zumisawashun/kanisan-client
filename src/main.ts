@@ -9,6 +9,7 @@ import {
   getRandomValue,
   hasPartialMatch,
   getUserName,
+  getFormattedDate,
 } from "./helpers";
 
 const createSheet = (
@@ -37,14 +38,11 @@ const getSheet = (
     return;
   }
 
-  const eventTs = params.event.event_ts;
-  const now = new Date(eventTs * 1000);
-  const date = Utilities.formatDate(now, "Asia/Tokyo", "yyyy/MM");
-
-  const sheet = spreadsheet.getSheetByName(date);
+  const { dateFullYearMonth } = getFormattedDate(params);
+  const sheet = spreadsheet.getSheetByName(dateFullYearMonth);
 
   if (!sheet) {
-    const newSheet = createSheet(params, date, spreadsheet);
+    const newSheet = createSheet(params, dateFullYearMonth, spreadsheet);
     return newSheet;
   }
 
@@ -59,49 +57,42 @@ const updateSheet = (
     sendToSlack(params, "sheetが見つからなかったかに！");
     return;
   }
+  const { dateFullYearMonthDay, time, dateFullYearMonthDayTime } =
+    getFormattedDate(params);
 
   const text = params.event.text;
-  const eventTs = params.event.event_ts;
 
-  const now = new Date(eventTs * 1000);
-  const hours = ("0" + now.getHours()).slice(-2);
-  const minutes = ("0" + now.getMinutes()).slice(-2);
-
-  const date = Utilities.formatDate(now, "Asia/Tokyo", "yyyy/MM/dd");
-  const time = hours + ":" + minutes;
-
-  const datetime = `${date} ${time}`;
-
-  const array = [date, time];
-
-  // NOTE:最終行列を取得する
   const lastrow = sheet.getLastRow();
   const lastcol = sheet.getLastColumn();
 
-  // NOTE:最終行列を指定する
   const values = sheet.getRange(lastrow, 1, 1, lastcol).getValues().flat();
 
   const taikin = values[2];
 
   if (hasPartialMatch(text, syukkin_keywords)) {
     if (!taikin) {
-      sendToSlack(params, `まだ退勤していないかに！ (${datetime})`);
+      const message = `まだ退勤していないかに！ (${dateFullYearMonthDayTime})`;
+      sendToSlack(params, message);
       return;
     }
-    sheet.appendRow(array);
+    sheet.appendRow([dateFullYearMonthDay, time]);
+
     const message = getRandomValue(syukkin_messages);
-    sendToSlack(params, `${message} (${datetime})`);
+    sendToSlack(params, `${message} (${dateFullYearMonthDayTime})`);
+    return;
   }
   if (hasPartialMatch(text, taikin_keywords)) {
     if (taikin) {
-      sendToSlack(params, `もう退勤しているかに！ (${datetime})`);
+      const message = `もう退勤しているかに！ (${dateFullYearMonthDayTime})`;
+      sendToSlack(params, message);
       return;
     }
     sheet.getRange(lastrow, 3).setValue(time);
     sheet.getRange(lastrow, 4).setValue(`=C${lastrow}-B${lastrow}`);
 
     const message = getRandomValue(taikin_messages);
-    sendToSlack(params, `${message} (${datetime})`);
+    sendToSlack(params, `${message} (${dateFullYearMonthDayTime})`);
+    return;
   }
 };
 
