@@ -22,6 +22,12 @@ $ cd kanisan-client
 ```bash
 $ yarn install
 ```
+- copy
+
+```bash
+$ cp .env.example .env2
+$ cp .clasp.example.json .clasp.json
+```
 
 - 上記の手順で失敗する場合 [Troubleshoot](#Troubleshoot)を確認してください
 

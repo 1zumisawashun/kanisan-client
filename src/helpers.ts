@@ -24,6 +24,7 @@ export const getRandomValue = (arr: string[]) => {
   return arr[randomIndex];
 };
 
+// NOTE:関数としてbool値を出力するのはhas〇〇の命名は良さそう
 export const hasPartialMatch = (str: string, patterns: string[]) => {
   return (
     patterns.find((pattern) => {
